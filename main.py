@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from torchvision import transforms
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from torch.autograd import grad
 
 from tqdm import tqdm
 from pathlib import Path
@@ -31,21 +32,24 @@ log_image_iter = 100
 log_nsample = 4
 
 # name = 'run2'
-# bs = 24
-# glr = 2e-5
-# dlr = 8e-5
+bs = 24
+glr = 2e-5
+dlr = 8e-5
+bs = 12
+name = 'run2_r1'
 
 # name = 'run3'
 # bs = 24
 # glr = 0.0001
 # dlr = 0.0003
 
-name = 'run4'
-bs = 24
-glr = 0.001
-dlr = 0.003
+# name = 'run4'
+# bs = 24
+# glr = 0.001
+# dlr = 0.003
+# bs = 12
+# name = 'run4_r1'
 
-# name = 'debug2'
 # log_scalar_iter = 1
 # log_image_iter = 100
 
@@ -86,14 +90,25 @@ for _  in pbar:
     w = hypn(z)
     y_fake = gen(w, x)
 
+    d_optim.zero_grad()
+
+    x.requires_grad = True
+    y_real.requires_grad = True
     d_fake = disc(x, y_fake.detach())
     d_real = disc(x, y_real)
-    d_loss = F.binary_cross_entropy_with_logits(d_fake, torch.zeros_like(d_fake)) + \
-             F.binary_cross_entropy_with_logits(d_real, torch.ones_like(d_real))
+    
+    # R1 reguralization
+    d_pred_fake = F.binary_cross_entropy_with_logits(d_fake, torch.zeros_like(d_fake)) 
+    d_pred_real = F.softplus(-d_real).mean()
+    (d_pred_fake+d_pred_real).backward(retain_graph=True)
+   
+    grad_real = grad(d_pred_real.sum(), (x, y_real), create_graph=True)[0]
+    d_reg = grad_real.reshape(grad_real.size(0), -1).norm(2, 1)**2
+    d_reg = 1/2* d_reg.mean()
 
-    d_optim.zero_grad()
-    d_loss.backward(retain_graph=True)
+    (10*d_reg).backward()
     d_optim.step()
+    d_loss = d_pred_fake + d_pred_real
 
     d_fake = disc(x, y_fake)
     g_loss = F.binary_cross_entropy_with_logits(d_fake, torch.ones_like(d_fake))
