@@ -9,8 +9,6 @@ from tqdm import tqdm
 from network import Generator, Discriminator, HyperNetwork 
 from dataset import PointCloudDataset, iterate
 
-
-
 zdim = 64
 wdim = 128
 xdim = 3
@@ -24,8 +22,7 @@ dset = PointCloudDataset()
 dloader = DataLoader(dset, B, shuffle=True)
 dloader = iterate(dloader)
 
-
-gen = Generator(xdim, ydim, wdim)
+gen = Generator(zdim, wdim, xdim, ydim)
 disc = Discriminator(xdim, ydim)
 hypn = HyperNetwork(zdim, wdim)
 
@@ -39,16 +36,14 @@ for _  in pbar:
     x_real, y_real = next(dloader)
 
     z = torch.randn(B, zdim)
-    w = hypn(z)
-    # x = torch.rand(B, xdim)
-    y_fake = gen(x_real, w)
+    y_fake = gen(z, x_real)
 
     d_fake = disc(x_real, y_fake)
     d_real = disc(x_real, y_real)
     d_loss = F.binary_cross_entropy_with_logits(d_fake, torch.zeros_like(d_fake)) + \
              F.binary_cross_entropy_with_logits(d_real, torch.ones_like(d_real))
     d_optim.zero_grad()
-    d_loss.backward()
+    d_loss.backward(retain_graph=True)
     d_optim.step()
 
     d_fake = disc(x_real, y_fake)

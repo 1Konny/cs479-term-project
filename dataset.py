@@ -2,6 +2,7 @@ import torch
 
 class PointCloudDataset(object):
     def __init__(self):
+        self.Np = Np = 200 
         pass
 
     def __len__(self):
@@ -11,8 +12,8 @@ class PointCloudDataset(object):
         xdim = 3
         ydim = 1
 
-        x = torch.randn(xdim)
-        y = torch.randn(ydim)
+        x = torch.randn(self.Np, xdim)
+        y = torch.randn(self.Np, ydim)
 
         return x, y 
 
