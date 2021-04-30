@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from torchvision import transforms
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from torch.autograd import grad
 
 from tqdm import tqdm
 from pathlib import Path
@@ -64,16 +65,30 @@ for _  in pbar:
     x_real = x_real.to(device)
     y_real = y_real.to(device)
 
+    x_real.requires_grad = True
     z = torch.randn(bs, zdim, device=device)
     w = hypn(z)
     y_fake = gen(w, x_real)
 
     d_fake = disc(x_real, y_fake.detach())
     d_real = disc(x_real, y_real)
-    d_loss = F.binary_cross_entropy_with_logits(d_fake, torch.zeros_like(d_fake)) + \
-             F.binary_cross_entropy_with_logits(d_real, torch.ones_like(d_real))
+    
+    # R1 reguralization
+    d_pred_real = F.softplus(-d_real).mean()
+    d_pred_real.backward(retain_graph=True)
+   
+    grad_real = grad(d_pred_real.sum(), x_real, create_graph=True)[0]
+    d_reg = grad_real.reshape(grad_real.size(0), -1).norm(2, 1)**2
+    d_reg = 1/2* d_reg.mean()
+    d_reg.backward()
+
+    d_pred_fake = F.binary_cross_entropy_with_logits(d_fake, torch.zeros_like(d_fake)) 
+    d_loss = d_pred_fake + d_pred_real
+
+    #d_loss = F.binary_cross_entropy_with_logits(d_fake, torch.zeros_like(d_fake)) + \
+    #        F.binary_cross_entropy_with_logits(d_real, torch.ones_like(d_real))
     d_optim.zero_grad()
-    d_loss.backward(retain_graph=True)
+    d_pred_fake.backward()
     d_optim.step()
 
     d_fake = disc(x_real, y_fake)
