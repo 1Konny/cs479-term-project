@@ -68,7 +68,7 @@ for _  in pbar:
     w = hypn(z)
     y_fake = gen(w, x_real)
 
-    d_fake = disc(x_real, y_fake)
+    d_fake = disc(x_real, y_fake.detach())
     d_real = disc(x_real, y_real)
     d_loss = F.binary_cross_entropy_with_logits(d_fake, torch.zeros_like(d_fake)) + \
              F.binary_cross_entropy_with_logits(d_real, torch.ones_like(d_real))
@@ -94,7 +94,7 @@ for _  in pbar:
     if global_iter % log_image_iter == 0:
         x = x_real[:log_nsample].data.cpu()
         yr = y_real[:log_nsample].data.cpu()
-        yf = (y_fake.sigmoid() >= 0.5)[:log_nsample].data.cpu()
+        yf = (y_fake >= 0.5)[:log_nsample].data.cpu()
         real = draw_pointcloud(x, yr)
         fake = draw_pointcloud(x, yf)
         writer.add_images('real', real, global_step=global_iter)

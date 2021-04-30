@@ -34,6 +34,8 @@ class LinearBlock(nn.Module):
             self.activation = nn.ReLU(True)
         elif activation == 'lrelu':
             self.activation = nn.LeakyReLU(0.2, True)
+        elif activation == 'sigmoid':
+            self.activation = nn.Sigmoid() 
         else:
             raise ValueError()
 
@@ -75,8 +77,7 @@ class FunctionalRepresentation(nn.Module):
             else:
                 layers += [LinearBlock(wdim, wdim, 'relu')]
         self.layers = nn.Sequential(*layers)
-        self.last_layer = LinearBlock(wdim, ydim, 'none')
-
+        self.last_layer = LinearBlock(wdim, ydim, 'sigmoid')
 
     def forward(self, ws, x):
         y = self.lff(x)
