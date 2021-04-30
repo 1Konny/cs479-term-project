@@ -1,39 +1,90 @@
+from math import pi
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from modsiren import SirenNet
+
+class LearnableFourierFeatures(nn.Module):
+    def __init__(self, xdim, fdim):
+        super(LearnableFourierFeatures, self).__init__()
+        self.fdim = fdim
+        self.mat = nn.Conv1d(xdim, 2*fdim, 1, 1, 0)
+
+    def forward(self, x):
+        assert x.ndim == 3 # B, Np, xdim
+        B, Np, _ = x.shape
+        x = self.mat(x.reshape(B*Np, -1, 1))
+        x = x.reshape(B, Np, -1)
+        x_cos = x[:, :, :self.fdim]
+        x_cos = torch.cos(2*pi*x_cos)
+        x_sin = x[:, :, self.fdim:]
+        x_sin = torch.sin(2*pi*x_sin)
+        x = torch.cat([x_cos, x_sin], -1) 
+        return x
+
+
+class LinearBlock(nn.Module):
+    def __init__(self, in_features, out_features, activation='none'):
+        super(LinearBlock, self).__init__()
+        self.linear = nn.Linear(in_features, out_features)
+        if activation == 'none':
+            self.activation = nn.Identity()
+        elif activation == 'relu':
+            self.activation = nn.ReLU(True)
+        elif activation == 'lrelu':
+            self.activation = nn.LeakyReLU(0.2, True)
+        elif activation == 'sigmoid':
+            self.activation = nn.Sigmoid() 
+        else:
+            raise ValueError()
+
+    def forward(self, x):
+        x = self.linear(x)
+        x = self.activation(x)
+        return x
+
 
 class HyperNetwork(nn.Module):
-    def __init__(self, zdim, wdim):
+    def __init__(self, zdim, wdim, num_layers=3): 
         super(HyperNetwork, self).__init__()
         self.zdim = zdim
         self.wdim = wdim
+        self.num_layers = num_layers
         self.layers = nn.Sequential(
-                nn.Linear(1, 1),
-                )
+            nn.Linear(zdim, 256),
+            nn.ReLU(True),
+            nn.Linear(256, 512),
+            nn.ReLU(True),
+            nn.Linear(512, wdim*num_layers),
+            )
 
     def forward(self, z):
-        assert z.ndim == 2
-        B, _ = z.shape
-        w = torch.randn(B, self.wdim)
+        B = z.shape[0]
+        w = self.layers(z).reshape(self.num_layers, B, self.wdim)
         return w
 
 
-#def __init__(self, dim_in, dim_hidden, dim_out, latent_dim, num_layers, w0 = 1., w0_initial = 30., use_bias = True, final_activation = None):
-class Generator(nn.Module):
-    def __init__(self, zdim, wdim, xdim, ydim, num_layers=5):
-        super(Generator, self).__init__()
-        self.zdim = zdim
-        self.wdim = wdim
-        self.xdim = xdim
-        self.ydim = ydim
-        self.layers = SirenNet(xdim, wdim, ydim, zdim, num_layers)  
+class FunctionalRepresentation(nn.Module):
+    def __init__(self, xdim=3, ydim=1, wdim=128, num_layers=3):
+        super().__init__()
+        self.lff = LearnableFourierFeatures(xdim, wdim)
 
-    def forward(self, z, x):
-        assert z.ndim == 2 # B, zdim 
-        assert x.ndim == 3 # B, Np, xdim
-        y = self.layers(z, x) # B, Np, 1
+        layers = []
+        for idx in range(num_layers):
+            if idx == 0:
+                layers += [LinearBlock(2*wdim, wdim, 'relu')]
+            else:
+                layers += [LinearBlock(wdim, wdim, 'relu')]
+        self.layers = nn.Sequential(*layers)
+        self.last_layer = LinearBlock(wdim, ydim, 'sigmoid')
+
+    def forward(self, ws, x):
+        y = self.lff(x)
+        for layer, w in zip(self.layers, ws):
+            y = layer(y)
+            y = y * w.unsqueeze(1)
+        y = self.last_layer(y)
         return y
 
 
