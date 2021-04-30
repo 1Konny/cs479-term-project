@@ -1,8 +1,9 @@
 from pathlib import Path
+import matplotlib.pyplot as plt
+import numpy as np
 import binvox_rw
 import random
 import torch
-
 
 class PointCloudDataset(object):
     def __init__(self, root, Np=4096, class_id='03001627'):
@@ -15,8 +16,6 @@ class PointCloudDataset(object):
         self.vertex_idxs = range(res**3) 
         self.vertex_coords = torch.stack(torch.meshgrid(*[torch.linspace(-1, 1, res) for _ in range(3)]), -1).reshape(-1, 3)
 
-        self[0]
-
     def __len__(self):
         return self.len
 
@@ -28,6 +27,7 @@ class PointCloudDataset(object):
         sampled_idxs = random.sample(self.vertex_idxs, k=self.Np)
         sampled_y = data.reshape(-1, 1)[sampled_idxs]
         sampled_x = self.vertex_coords[sampled_idxs]
+        # sampled_x = torch.from_numpy(rotate_point_cloud_by_angle(sampled_x.unsqueeze(0), 3)).squeeze(0)
         return sampled_x, sampled_y 
 
 
