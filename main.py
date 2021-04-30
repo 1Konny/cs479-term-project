@@ -6,25 +6,27 @@ from torch.utils.data import DataLoader
 
 from tqdm import tqdm
 
-from network import Generator, Discriminator, HyperNetwork 
+from network import HyperNetwork, FunctionalRepresentation, Discriminator
 from dataset import PointCloudDataset, iterate
 
 zdim = 64
 wdim = 128
 xdim = 3
 ydim = 1
+num_layers = 3
 B = 64
+Np = 4096
 max_iter = 10000
 glr = 0.0001
 dlr = 0.0003
 
-dset = PointCloudDataset()
+dset = PointCloudDataset(root='data/ShapeNetVox32/', Np=Np)
 dloader = DataLoader(dset, B, shuffle=True)
 dloader = iterate(dloader)
 
-gen = Generator(zdim, wdim, xdim, ydim)
+hypn = HyperNetwork(zdim, wdim, num_layers)
+gen = FunctionalRepresentation(xdim, ydim, wdim, num_layers)
 disc = Discriminator(xdim, ydim)
-hypn = HyperNetwork(zdim, wdim)
 
 g_optim = torch.optim.Adam(list(gen.parameters()) + list(hypn.parameters()),
                            lr=glr) 
@@ -36,7 +38,8 @@ for _  in pbar:
     x_real, y_real = next(dloader)
 
     z = torch.randn(B, zdim)
-    y_fake = gen(z, x_real)
+    w = hypn(z)
+    y_fake = gen(w, x_real)
 
     d_fake = disc(x_real, y_fake)
     d_real = disc(x_real, y_real)
