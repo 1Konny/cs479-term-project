@@ -3,7 +3,7 @@ from math import pi
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from pointconv_util import PointConvDensitySetAbstraction
+from models.pointconv_util import PointConvDensitySetAbstraction
 
 
 class LearnableFourierFeatures(nn.Module):
@@ -85,7 +85,8 @@ class FunctionalRepresentation(nn.Module):
             else:
                 layers += [LinearBlock(wdim, wdim, 'lrelu')]
         self.layers = nn.Sequential(*layers)
-        self.last_layer = LinearBlock(wdim, ydim, 'tanh')
+        # self.last_layer = LinearBlock(wdim, ydim, 'tanh')
+        self.last_layer = LinearBlock(wdim, ydim, 'none')
 
     def forward(self, ws, x):
         y = self.lff(x)

@@ -1,3 +1,5 @@
+import argparse
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -9,49 +11,52 @@ from torch.autograd import grad
 from tqdm import tqdm
 from pathlib import Path
 
-from network import HyperNetwork, FunctionalRepresentation, Discriminator
+from models.network import HyperNetwork, FunctionalRepresentation, Discriminator
+#from models.sets import SetTransformer as Discriminator
 from dataset import PointCloudDataset, iterate
 from utils import draw_pointcloud
 
+parser = argparse.ArgumentParser()
+parser.add_argument('--name', default='run', type=str)
+parser.add_argument('--glr', default=0.0001, type=float)
+parser.add_argument('--dlr', default=0.0003, type=float)
+parser.add_argument('--batch_size', default=12, type=int)
+parser.add_argument('--Np', default=4096, type=int)
+
+parser.add_argument('--zdim', default=64, type=int)
+parser.add_argument('--wdim', default=128, type=int)
+parser.add_argument('--xdim', default=3, type=int)
+parser.add_argument('--ydim', default=1, type=int)
+parser.add_argument('--num_layers', default=3, type=int)
+parser.add_argument('--w_dreg', default=10, type=float)
+
+parser.add_argument('--max_iter', default=1000000, type=int)
+parser.add_argument('--print_iter', default=1, type=int)
+parser.add_argument('--log_scalar_iter', default=10, type=int)
+parser.add_argument('--log_image_iter', default=100, type=int)
+parser.add_argument('--log_nsample', default=4, type=int)
+
+args = parser.parse_args()
+
 device = 'cuda'
-zdim = 64
-wdim = 128
-xdim = 3
-ydim = 1
-num_layers = 3
-bs = 16
-Np = 4096
-glr = 0.001
-dlr = 0.003
-max_iter = 10000
+zdim = args.zdim 
+wdim = args.wdim 
+xdim = args.xdim
+ydim = args.ydim
+num_layers = args.num_layers
+bs = args.batch_size
+Np = args.Np
+glr = args.glr
+dlr = args.dlr
+name = args.name
+
 global_iter = 0
-print_iter = 1
-log_scalar_iter = 10
-# log_image_iter = 500
-log_image_iter = 100
-log_nsample = 4
+max_iter = args.max_iter 
+print_iter = args.print_iter
+log_scalar_iter = args.log_scalar_iter
+log_image_iter = args.log_image_iter
+log_nsample = args.log_nsample
 
-# name = 'run2'
-bs = 24
-glr = 2e-5
-dlr = 8e-5
-bs = 12
-name = 'run2_r1'
-
-# name = 'run3'
-# bs = 24
-# glr = 0.0001
-# dlr = 0.0003
-
-# name = 'run4'
-# bs = 24
-# glr = 0.001
-# dlr = 0.003
-# bs = 12
-# name = 'run4_r1'
-
-# log_scalar_iter = 1
-# log_image_iter = 100
 
 exp_dir = Path('outputs') / name
 log_dir = exp_dir / 'tensorboard'
@@ -65,6 +70,7 @@ dloader = iterate(dloader)
 hypn = HyperNetwork(zdim, wdim, num_layers).to(device)
 gen = FunctionalRepresentation(xdim, ydim, wdim, num_layers).to(device)
 disc = Discriminator(xdim, ydim).to(device)
+# disc = Discriminator(xdim+ydim, dim_hidden=256, num_heads=4, num_inds=16).to(device)
 
 g_optim = torch.optim.Adam(list(gen.parameters()) + list(hypn.parameters()),
                            lr=glr) 
@@ -96,7 +102,33 @@ for _  in pbar:
     y_real.requires_grad = True
     d_fake = disc(x, y_fake.detach())
     d_real = disc(x, y_real)
+
+
+
+
     
+    #d_loss_fake = F.binary_cross_entropy_with_logits(d_fake, torch.zeros_like(d_fake)) 
+    #d_loss_real = F.binary_cross_entropy_with_logits(d_real, torch.zeros_like(d_real)) 
+    #d_loss = d_loss_fake + d_loss_real
+
+    #d_optim.zero_grad()
+    #d_loss.backward(retain_graph=True)
+    #d_optim.step()
+
+
+    ##y_fake = gen(w, x)
+    #d_fake = disc(x, y_fake)
+    #g_loss = F.binary_cross_entropy_with_logits(d_fake, torch.ones_like(d_fake))
+
+    #g_optim.zero_grad()
+    #g_loss.backward()
+    #g_optim.step()
+
+    #d_reg = 0
+
+
+
+
     # R1 reguralization
     d_pred_fake = F.binary_cross_entropy_with_logits(d_fake, torch.zeros_like(d_fake)) 
     d_pred_real = F.softplus(-d_real).mean()
@@ -106,7 +138,7 @@ for _  in pbar:
     d_reg = grad_real.reshape(grad_real.size(0), -1).norm(2, 1)**2
     d_reg = 1/2* d_reg.mean()
 
-    (10*d_reg).backward()
+    (args.w_dreg*d_reg).backward()
     d_optim.step()
     d_loss = d_pred_fake + d_pred_real
 
@@ -129,7 +161,7 @@ for _  in pbar:
     if global_iter % log_image_iter == 0:
         x = x[:log_nsample].data.cpu()
         yr = y_real[:log_nsample].data.cpu().add(1).div(2)
-        yf = (y_fake.add(1).div(2) >= 0.5)[:log_nsample].data.cpu()
+        yf = (y_fake.clamp(-1, 1).add(1).div(2) >= 0.5)[:log_nsample].data.cpu()
         real = draw_pointcloud(x, yr)
         fake = draw_pointcloud(x, yf)
         writer.add_images('real', real, global_step=global_iter)

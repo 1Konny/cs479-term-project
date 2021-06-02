@@ -13,8 +13,9 @@ class PointCloudDataset(object):
         self.Np = Np
 
         res = 32
-        self.vertex_idxs = range(res**3) 
+        self.vertex_idxs = torch.arange(res**3) 
         self.vertex_coords = torch.stack(torch.meshgrid(*[torch.linspace(-1, 1, res) for _ in range(3)]), -1).reshape(-1, 3)
+        self[0]
 
     def __len__(self):
         return self.len
@@ -23,11 +24,20 @@ class PointCloudDataset(object):
         path = self.paths[idx]
         with open(path, 'rb') as f:
             m1 = binvox_rw.read_as_3d_array(f)
-        data = torch.from_numpy(m1.data).float()
-        sampled_idxs = random.sample(self.vertex_idxs, k=self.Np)
-        sampled_y = data.reshape(-1, 1)[sampled_idxs]
-        sampled_x = self.vertex_coords[sampled_idxs]
-        # sampled_x = torch.from_numpy(rotate_point_cloud_by_angle(sampled_x.unsqueeze(0), 3)).squeeze(0)
+        data = torch.from_numpy(m1.data).float().reshape(-1)
+        loc_ones = self.vertex_idxs[data == 1]
+        loc_zeros = self.vertex_idxs[data != 1]
+        N_ones = min(loc_ones.shape[0], int(self.Np*0.8))
+        N_zeros = self.Np - N_ones
+        
+        loc_ones = loc_ones[torch.randperm(loc_ones.shape[0])[:N_ones]]
+        loc_zeros = loc_zeros[torch.randperm(loc_zeros.shape[0])[:N_zeros]]
+
+        sampled_y = torch.cat([data[loc_ones], data[loc_zeros]]).reshape(self.Np, 1)
+        sampled_x = torch.cat([self.vertex_coords[loc_ones], self.vertex_coords[loc_zeros]])
+        # sampled_idxs = random.sample(self.vertex_idxs.tolist(), k=self.Np)
+        # sampled_y = data.reshape(-1, 1)[sampled_idxs]
+        # sampled_x = self.vertex_coords[sampled_idxs]
         return sampled_x, sampled_y 
 
 
