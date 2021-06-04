@@ -5,6 +5,11 @@ import binvox_rw
 import random
 import torch
 
+import mcubes
+import trimesh
+from skimage import measure
+
+
 class PointCloudDataset(object):
     def __init__(self, root, Np=4096, class_id='03001627'):
         self.root = Path(root)
@@ -25,6 +30,15 @@ class PointCloudDataset(object):
         with open(path, 'rb') as f:
             m1 = binvox_rw.read_as_3d_array(f)
         data = torch.from_numpy(m1.data).float().reshape(-1)
+
+        import ipdb; ipdb.set_trace(context=15)
+        verts, faces, normals, values = measure.marching_cubes((1-torch.from_numpy(m1.data).float()).numpy())
+        mesh = trimesh.Trimesh(vertices=verts, faces=faces)
+        export = trimesh.exchange.obj.export_obj(mesh)
+        with open('ho.obj', 'wb') as f:
+            trimesh.util.write_encoded(f, export)
+        import ipdb; ipdb.set_trace(context=15)
+
         loc_ones = self.vertex_idxs[data == 1]
         loc_zeros = self.vertex_idxs[data != 1]
         N_ones = min(loc_ones.shape[0], int(self.Np*0.8))

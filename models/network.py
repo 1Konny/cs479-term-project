@@ -48,68 +48,106 @@ class LinearBlock(nn.Module):
         return x
 
 
+# class HyperNetwork(nn.Module):
+#     def __init__(self, zdim, wdim, num_layers=3): 
+#         super(HyperNetwork, self).__init__()
+#         self.zdim = zdim
+#         self.wdim = wdim
+#         self.num_layers = num_layers
+#         self.layers = nn.Sequential(
+#             nn.Linear(zdim, 256),
+#             nn.ReLU(True),
+#             nn.Linear(256, 512),
+#             nn.ReLU(True),
+#             nn.Linear(512, wdim*num_layers),
+#             )
+
+#     def forward(self, z):
+#         B = z.shape[0]
+#         w = self.layers(z).reshape(self.num_layers, B, self.wdim)
+#         return w
+
+
+# class FunctionalRepresentation(nn.Module):
+#     def __init__(self, xdim=3, ydim=1, wdim=128, num_layers=3):
+#         super().__init__()
+#         self.lff = nn.Sequential(
+#             nn.Linear(xdim, wdim),
+#             nn.LeakyReLU(0.2, True),
+#             )
+
+#         layers = []
+#         for idx in range(num_layers):
+#             if idx == 0:
+#                 layers += [LinearBlock(wdim, wdim, 'lrelu')]
+#             else:
+#                 layers += [LinearBlock(wdim, wdim, 'lrelu')]
+#         self.layers = nn.Sequential(*layers)
+#         self.last_layer = LinearBlock(wdim, ydim, 'none')
+
+#     def forward(self, ws, x):
+#         y = self.lff(x)
+#         for layer, w in zip(self.layers, ws):
+#             y = layer(y)
+#             y = y * w.unsqueeze(1)
+#         y = self.last_layer(y)
+#         return y
+
+
+
 class HyperNetwork(nn.Module):
-    def __init__(self, zdim, wdim, num_layers=3): 
+    def __init__(self, zdim, xdim, wdim, ydim, num_layers=3): 
         super(HyperNetwork, self).__init__()
         self.zdim = zdim
+        self.xdim = xdim
         self.wdim = wdim
+        self.ydim = ydim
         self.num_layers = num_layers
+        num_w_params = xdim*wdim + ydim*wdim + wdim*wdim*(num_layers-1)
+        num_b_params = wdim*num_layers + ydim
         self.layers = nn.Sequential(
             nn.Linear(zdim, 256),
             nn.ReLU(True),
             nn.Linear(256, 512),
             nn.ReLU(True),
-            nn.Linear(512, wdim*num_layers),
             )
+        out_params = {
+            'w_in': nn.Linear(512, xdim*wdim),
+            'b_in': nn.Linear(512, wdim),
+            'w_out': nn.Linear(512, ydim*wdim),
+            'b_out': nn.Linear(512, ydim),
+            }
+        for i in range(1, num_layers):
+            out_params['w_%d' % i] = nn.Linear(512, wdim*wdim)
+            out_params['b_%d' % i] = nn.Linear(512, wdim)
+        self.out_params = nn.ModuleDict(out_params)
 
     def forward(self, z):
-        B = z.shape[0]
-        w = self.layers(z).reshape(self.num_layers, B, self.wdim)
+        h = self.layers(z)
+        w = {k:self.out_params[k](h) for k in self.out_params}
         return w
 
 
 class FunctionalRepresentation(nn.Module):
     def __init__(self, xdim=3, ydim=1, wdim=128, num_layers=3):
         super().__init__()
-        #self.lff = LearnableFourierFeatures(xdim, wdim)
-        self.lff = nn.Sequential(
-            nn.Linear(xdim, wdim),
-            nn.LeakyReLU(0.2, True),
-            )
-
-        layers = []
-        for idx in range(num_layers):
-            if idx == 0:
-                #layers += [LinearBlock(2*wdim, wdim, 'lrelu')]
-                layers += [LinearBlock(wdim, wdim, 'lrelu')]
-            else:
-                layers += [LinearBlock(wdim, wdim, 'lrelu')]
-        self.layers = nn.Sequential(*layers)
-        # self.last_layer = LinearBlock(wdim, ydim, 'tanh')
-        self.last_layer = LinearBlock(wdim, ydim, 'none')
+        self.xdim = xdim
+        self.wdim = wdim
+        self.ydim = ydim
+        self.num_layers = num_layers
+        self.actv_h = nn.LeakyReLU(0.2, True)
+        self.actv_y = nn.Tanh()
 
     def forward(self, ws, x):
-        y = self.lff(x)
-        for layer, w in zip(self.layers, ws):
-            y = layer(y)
-            y = y * w.unsqueeze(1)
-        y = self.last_layer(y)
+        B = x.shape[0]
+        h = x @ ws['w_in'].reshape(B, self.xdim, self.wdim) + ws['b_in'].reshape(B, 1, self.wdim)
+        h = self.actv_h(h) 
+        for i in range(1, self.num_layers):
+            h = h @ ws['w_%d' % i].reshape(B, self.wdim, self.wdim) + ws['b_%d' % i].reshape(B, 1, self.wdim)
+            h = self.actv_h(h) 
+        h = h @ ws['w_out'].reshape(B, self.wdim, self.ydim) + ws['b_out'].reshape(B, 1, self.ydim)
+        y = self.actv_y(h)
         return y
-
-
-# class Discriminator(nn.Module):
-#     def __init__(self, xdim, ydim):
-#         super(Discriminator, self).__init__()
-#         self.xdim = xdim
-#         self.ydim = ydim
-#         self.layers = nn.Sequential(
-#                 nn.Linear(xdim+ydim, 1),
-#                 )
-
-#     def forward(self, x, y):
-#         xy = torch.cat([x, y], -1)
-#         out = self.layers(xy)
-#         return out
 
 
 class PointConv(nn.Module):
