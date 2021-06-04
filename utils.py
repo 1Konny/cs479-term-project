@@ -4,6 +4,9 @@ import binvox_rw
 import cv2
 import torch
 
+import trimesh
+from skimage import measure
+
 
 def rotate_point_cloud_by_angle(batch_data, rotation_angle):
     # https://github.com/hxdengBerkeley/PointCNN.Pytorch/blob/master/provider.py
@@ -67,3 +70,26 @@ def draw_pointcloud(x: torch.Tensor, x_mask: torch.Tensor, grid_on=True):
         plt.close(fig)
 
     return torch.stack(imgs, dim=0)
+
+
+def of_to_voxel(of, th=0.5):
+    return (of.clamp(-1, 1).add(1).div(2) >= th).float() 
+
+
+def marching_cube(voxels):
+    # voxels = (torch.rand_like(voxels) >= 0.5).float()
+    meshes = []
+    for voxel in voxels:
+        try:
+            verts, faces, normals, values = measure.marching_cubes_lewiner(1-voxel.float().numpy())
+        except RuntimeError:
+            meshes += [None]
+        else:
+            meshes += [trimesh.Trimesh(vertices=verts, faces=faces)]
+    return meshes
+
+
+def save_obj(mesh, filepath):
+    export = trimesh.exchange.obj.export_obj(mesh)
+    with open(filepath, 'wb') as f:
+        trimesh.util.write_encoded(f, export)
