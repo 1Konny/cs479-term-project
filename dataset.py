@@ -25,21 +25,26 @@ class PointCloudDataset(object):
         path = self.paths[idx]
         with open(path, 'rb') as f:
             m1 = binvox_rw.read_as_3d_array(f)
-        data = torch.from_numpy(m1.data).float().reshape(-1)
+        if True:
+            # importance sampling
+            data = torch.from_numpy(m1.data).float().reshape(-1)
 
-        loc_ones = self.vertex_idxs[data == 1]
-        loc_zeros = self.vertex_idxs[data != 1]
-        N_ones = min(loc_ones.shape[0], int(self.Np*0.8))
-        N_zeros = self.Np - N_ones
-        
-        loc_ones = loc_ones[torch.randperm(loc_ones.shape[0])[:N_ones]]
-        loc_zeros = loc_zeros[torch.randperm(loc_zeros.shape[0])[:N_zeros]]
+            loc_ones = self.vertex_idxs[data == 1]
+            loc_zeros = self.vertex_idxs[data != 1]
+            N_ones = min(loc_ones.shape[0], int(self.Np*0.8))
+            N_zeros = self.Np - N_ones
+            
+            loc_ones = loc_ones[torch.randperm(loc_ones.shape[0])[:N_ones]]
+            loc_zeros = loc_zeros[torch.randperm(loc_zeros.shape[0])[:N_zeros]]
 
-        sampled_y = torch.cat([data[loc_ones], data[loc_zeros]]).reshape(self.Np, 1)
-        sampled_x = torch.cat([self.vertex_coords[loc_ones], self.vertex_coords[loc_zeros]])
-        # sampled_idxs = random.sample(self.vertex_idxs.tolist(), k=self.Np)
-        # sampled_y = data.reshape(-1, 1)[sampled_idxs]
-        # sampled_x = self.vertex_coords[sampled_idxs]
+            sampled_y = torch.cat([data[loc_ones], data[loc_zeros]]).reshape(self.Np, 1)
+            sampled_x = torch.cat([self.vertex_coords[loc_ones], self.vertex_coords[loc_zeros]])
+        else:
+            # uniform sampling 
+            data = torch.from_numpy(m1.data).float()
+            sampled_idxs = random.sample(self.vertex_idxs.tolist(), k=self.Np)
+            sampled_y = data.reshape(-1, 1)[sampled_idxs]
+            sampled_x = self.vertex_coords[sampled_idxs]
         return sampled_x, sampled_y 
 
 

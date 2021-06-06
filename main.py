@@ -12,7 +12,6 @@ from torch.autograd import grad
 from tqdm import tqdm
 from pathlib import Path
 
-from models.network import HyperNetwork, FunctionalRepresentation, Discriminator
 from dataset import PointCloudDataset, iterate
 from utils import draw_pointcloud, marching_cube, of_to_voxel, save_obj
 
@@ -31,6 +30,7 @@ parser.add_argument('--ydim', default=1, type=int)
 parser.add_argument('--num_layers', default=3, type=int)
 parser.add_argument('--w_dreg', default=10, type=float)
 parser.add_argument('--disc_type', default='pointconv', type=str, choices=['pointconv', 'settsfm'])
+parser.add_argument('--gen_type', default='simple', type=str, choices=['simple', 'mod'])
 
 parser.add_argument('--max_iter', default=1000000, type=int)
 parser.add_argument('--print_iter', default=1, type=int)
@@ -76,14 +76,21 @@ x32 = torch.stack(torch.meshgrid(*[torch.linspace(-1, 1, 32) for _ in range(3)])
 x64 = torch.stack(torch.meshgrid(*[torch.linspace(-1, 1, 64) for _ in range(3)]), -1).reshape(-1, 3)#.to(device)
 x128 = torch.stack(torch.meshgrid(*[torch.linspace(-1, 1, 128) for _ in range(3)]), -1).reshape(-1, 3)#.to(device)
 
-hypn = HyperNetwork(zdim, xdim, wdim, ydim, num_layers).to(device)
-gen = FunctionalRepresentation(xdim, ydim, wdim, num_layers).to(device)
+if args.gen_type == 'mod':
+    from models.network import HyperNetworkMod, FunctionalRepresentationMod 
+    hypn = HyperNetworkMod(zdim, wdim, num_layers).to(device)
+    gen = FunctionalRepresentationMod(xdim, ydim, wdim, num_layers).to(device)
+elif args.gen_type == 'simple':
+    from models.network import HyperNetwork, FunctionalRepresentation 
+    hypn = HyperNetwork(zdim, xdim, wdim, ydim, num_layers).to(device)
+    gen = FunctionalRepresentation(xdim, ydim, wdim, num_layers).to(device)
 if args.disc_type == 'pointconv':
     from models.network import Discriminator
     disc = Discriminator(xdim, ydim).to(device)
 elif args.disc_type == 'settsfm':
     from models.sets import SetTransformer as Discriminator
     disc = Discriminator(xdim+ydim, dim_hidden=256, num_heads=4, num_inds=16).to(device)
+
 
 g_optim = torch.optim.Adam(list(gen.parameters()) + list(hypn.parameters()),
                            lr=glr, betas=(0.5, 0.999)) 

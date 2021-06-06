@@ -48,50 +48,50 @@ class LinearBlock(nn.Module):
         return x
 
 
-# class HyperNetwork(nn.Module):
-#     def __init__(self, zdim, wdim, num_layers=3): 
-#         super(HyperNetwork, self).__init__()
-#         self.zdim = zdim
-#         self.wdim = wdim
-#         self.num_layers = num_layers
-#         self.layers = nn.Sequential(
-#             nn.Linear(zdim, 256),
-#             nn.ReLU(True),
-#             nn.Linear(256, 512),
-#             nn.ReLU(True),
-#             nn.Linear(512, wdim*num_layers),
-#             )
+class HyperNetworkMod(nn.Module):
+    def __init__(self, zdim, wdim, num_layers=3): 
+        super(HyperNetworkMod, self).__init__()
+        self.zdim = zdim
+        self.wdim = wdim
+        self.num_layers = num_layers
+        self.layers = nn.Sequential(
+            nn.Linear(zdim, 256),
+            nn.ReLU(True),
+            nn.Linear(256, 512),
+            nn.ReLU(True),
+            nn.Linear(512, wdim*num_layers),
+            )
 
-#     def forward(self, z):
-#         B = z.shape[0]
-#         w = self.layers(z).reshape(self.num_layers, B, self.wdim)
-#         return w
+    def forward(self, z):
+        B = z.shape[0]
+        w = self.layers(z).reshape(self.num_layers, B, self.wdim)
+        return w
 
 
-# class FunctionalRepresentation(nn.Module):
-#     def __init__(self, xdim=3, ydim=1, wdim=128, num_layers=3):
-#         super().__init__()
-#         self.lff = nn.Sequential(
-#             nn.Linear(xdim, wdim),
-#             nn.LeakyReLU(0.2, True),
-#             )
+class FunctionalRepresentationMod(nn.Module):
+    def __init__(self, xdim=3, ydim=1, wdim=128, num_layers=3):
+        super().__init__()
+        self.lff = nn.Sequential(
+            nn.Linear(xdim, wdim),
+            nn.LeakyReLU(0.2, True),
+            )
 
-#         layers = []
-#         for idx in range(num_layers):
-#             if idx == 0:
-#                 layers += [LinearBlock(wdim, wdim, 'lrelu')]
-#             else:
-#                 layers += [LinearBlock(wdim, wdim, 'lrelu')]
-#         self.layers = nn.Sequential(*layers)
-#         self.last_layer = LinearBlock(wdim, ydim, 'none')
+        layers = []
+        for idx in range(num_layers):
+            if idx == 0:
+                layers += [LinearBlock(wdim, wdim, 'lrelu')]
+            else:
+                layers += [LinearBlock(wdim, wdim, 'lrelu')]
+        self.layers = nn.Sequential(*layers)
+        self.last_layer = LinearBlock(wdim, ydim, 'none')
 
-#     def forward(self, ws, x):
-#         y = self.lff(x)
-#         for layer, w in zip(self.layers, ws):
-#             y = layer(y)
-#             y = y * w.unsqueeze(1)
-#         y = self.last_layer(y)
-#         return y
+    def forward(self, ws, x):
+        y = self.lff(x)
+        for layer, w in zip(self.layers, ws):
+            y = layer(y)
+            y = y * w.unsqueeze(1)
+        y = self.last_layer(y)
+        return y
 
 
 
